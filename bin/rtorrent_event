@@ -1,0 +1,18 @@
+#!/usr/bin/python3.5
+
+import logging
+import sys
+
+import rtorrent_event
+
+if __name__ == "__main__":
+    args = rtorrent_event.parse_args()
+    logfile = (sys.stderr if args.log_file is None
+               else open(args.log_file, 'a', encoding='utf-8'))
+    logging.basicConfig(level=logging.ERROR - 10 * args.verbose,
+                        format='%(asctime)s - %(levelname)s: %(message)s',
+                        stream=logfile)
+    if not args.sql_file.exists():
+        rtorrent_event.create_tables(args.sql_file)
+    rtorrent_event.main(args)
+
