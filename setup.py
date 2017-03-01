@@ -1,4 +1,8 @@
 from setuptools import setup
+import sys
+
+if sys.version_info < (3, 5):
+    sys.exit("Requires Python 3.5+.")
 
 setup(name='rtorrent_event',
       version='0.1',
