@@ -358,7 +358,7 @@ def handle_remove_torrent(con, file, no_action, args=None):
         logging.error("Hash to remove not in db: %s" % hash)
         raise rTorEventException("Hash to remove not in db: %s" % hash)
     else:
-        logging.info("Remove hash, name, tracker: %s, '%s', %s" %
+        logging.info("Remove hash, name, tracker from db: %s, '%s', %s" %
                      (hash, name, tracker))
         if args.remove:
             rmfiles = rm_file_hook(con, file, args)
@@ -500,7 +500,7 @@ def hooks_and_remove_torrent(con, path, args, queues):
 
         rm files if args.remove is True via rm_file_hook
     """
-    logging.info("Removed file: %s" % str(path))
+    logging.debug("Removed file: %s" % str(path))
     hook = getattr(hooks, 'pre_remove', None)
     if hook:
         logging.debug("Running pre_remove.")
