@@ -13,4 +13,8 @@ setup(name='rtorrent_event',
       keywords='rtorrent',
       scripts=['bin/rtorrent_event'],
       packages=['rtorrent_event'],
+      extras_require={
+          'daemon':['daemons']
+      }
      )
+
