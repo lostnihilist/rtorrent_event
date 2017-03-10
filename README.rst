@@ -37,9 +37,9 @@ post_remove:
    - name: name of the torrent,
    - tracker: the tracker hostname associated with the torrent,
    - hash: the hash of the torrent,
-   - rmfiles: the files that were in fact removed (with -n, that would have been
-     removed; without --remove, this is empty list. Does not include files that
-     we tried to remove but failed to for logged reason.),
+   - rmfiles: the files that were in fact removed (with -n, that would have
+     been removed; without --remove, this is empty list. Does not include files
+     that we tried to remove but failed to for logged reason.),
    - torfiles: the files associated with the torrent,
    - tor: the torrent,
    - ltor: libtorrent, and
@@ -48,7 +48,9 @@ post_remove:
 Finally, if you setup rtorrent to create a file <HASH>.complete in the rtorrent
 session directory when a file is completed, a hook named 'complete' will be
 run with signature (con, path, args, queues). Completed files are added to
-the queues dict under key 'complete'.
+the queues dict under key 'complete', but 'path' has already been pop_left'd
+from it. If you need to retry your complete action, append or prepend as you
+wish.
 
 There is also a hook that is run before the program starts listening for
 changes 'pre_loop' with signature pre_loop(con, inot, args, queues, qfuncs,
