@@ -43,8 +43,8 @@ from inotify.constants import IN_CREATE, IN_DELETE
 #from chardet import detect
 
 
-LOG_FILE = "~/.config/rtorrent_event/removal.log"
-SQL_FILE = "~/.config/rtorrent_event/file_history.db"
+LOG_FILE = "~/.config/rtorrent_event/event.log"
+SQL_FILE = "~/.config/rtorrent_event/file.db"
 HOOK_FILE = "~/.config/rtorrent_event/hooks.py"
 PID_FILE = "~/.local/var/run/rtorrent_event.pid"
 SLEEP_TIME = 3 #seconds
