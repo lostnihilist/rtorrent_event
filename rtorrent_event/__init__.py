@@ -387,6 +387,8 @@ def rm_file_hook(con, file, args):
                        WHERE s.file IS NULL AND f.hash = ?;''', (hash,))
     rmfiles = [x for (x,) in c.fetchall()
                if not args.paths or any(is_parent(p, x) for p in args.paths)]
+    c.execute('SELECT count(*) FROM session_files WHERE hash = ?', (hash,))
+    file_count = c.fetchall()[0][0]
     c.close()
     if args.no_action:
         print("Remove files:\n%s" % tabnew_line_join(rmfiles))
@@ -400,6 +402,8 @@ def rm_file_hook(con, file, args):
             logging.exception("Could not remove file: '%s'" % str(file))
         else:
             success.append(file)
+    logging.info("File counts Removed/Removable/Total: %d/%d/%d" %
+                 (len(success), len(rmfiles), file_count))
     return list(success)
 
 def clean_tables(con, no_action, fs_file_set, args=None):
