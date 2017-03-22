@@ -402,8 +402,8 @@ def rm_file_hook(con, file, args):
             logging.exception("Could not remove file: '%s'" % str(file))
         else:
             success.append(file)
-    logging.info("File counts Removed/Removable/Total: %d/%d/%d" %
-                 (len(success), len(rmfiles), file_count))
+    logging.info("File counts for hash %s removed/removable/rotal: %d/%d/%d" %
+                 (hash, len(success), len(rmfiles), file_count))
     return list(success)
 
 def clean_tables(con, no_action, fs_file_set, args=None):
