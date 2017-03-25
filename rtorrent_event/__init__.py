@@ -624,7 +624,6 @@ def clean(args):
     populate_session_tbl(con, args.session, args.no_action, args=args)
     remove_missing_hashes(con, args.session, args.no_action, args=args)
     fs_file_set = build_fs_file_set(*args.paths)
-    check_rtorrent_running(args.session, args.force)
     clean_tables(con, args.no_action, fs_file_set, args=args)
     if args.remove:
         remove_orphan_files(con, args.no_action, fs_file_set, args=args)
