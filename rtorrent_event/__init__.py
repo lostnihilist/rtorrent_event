@@ -4,10 +4,12 @@
 # * Various features require 3.5+
 # * to install inotify library https://github.com/dsoprea/PyInotify
 #   (i.e. https://pypi.python.org/pypi/inotify)
+#   pip3 install --user inotify
 #   git clone; cd; python3.5 setup.py install --user
 # * same with daemons (optional unless --daemon used)
 #   https://github.com/kevinconway/daemons
 #   https://pypi.python.org/pypi/daemons
+#   pip3 install --user daemons
 
 # TODO:
 # * add config file?
@@ -417,7 +419,7 @@ def clean_tables(con, no_action, fs_file_set, args=None):
         if no_action:
             print("Remove from session: '%s'" % tabnew_line_join(rmfiles))
             return
-        logging.debug("Remove from session: '%s'" % tabnew_line_join(rmfiles))
+        logging.info("Remove from session: '%s'" % tabnew_line_join(rmfiles))
         try:
             if rmfiles:
                 c = con.execute("DELETE FROM session_files WHERE file IN (%s)" %
@@ -440,7 +442,7 @@ def clean_tables(con, no_action, fs_file_set, args=None):
         except sqlite3.Error as e:
             logging.exception("Error removing from torrent_data")
             hashrm = -1
-        logging.debug("Removed %d rows from torrent_data table" % hashrm)
+        logging.info("Removed %d rows from torrent_data table" % hashrm)
     con.commit()
 
 def remove_orphan_files(con, no_action, fs_file_set, bypass_rt_running=False,
@@ -451,13 +453,13 @@ def remove_orphan_files(con, no_action, fs_file_set, bypass_rt_running=False,
         db_file_set = {x for (x,) in c.fetchall()}
         c.close()
     for file in fs_file_set - db_file_set:
+        if args.paths and not any(is_parent(p, file) for p in args.paths):
+            continue
         if no_action:
             print("Remove from fs: '%s'" % str(file))
             continue
-        if args.paths and not any(is_parent(p, file) for p in args.paths):
-            continue
         try:
-            logging.debug("Remove from fs: '%s'" % str(file))
+            logging.info("Remove from fs: '%s'" % str(file))
             file.unlink()
         except (OSError, IOError) as e:
             logging.exception("Could not remove from fs: '%s'" % str(file))
@@ -472,6 +474,8 @@ def prune_empty_directories(*dirs):
                 os.rmdir(d)
             except OSError:
                 pass
+            else:
+                logging.info("Removed empty directory: '%s'" % d)
 
 def import_user(file):
     "import a user python file that is not on path as if it were a module"
