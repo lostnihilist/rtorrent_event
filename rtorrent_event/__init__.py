@@ -12,6 +12,7 @@
 #   pip3 install --user daemons
 
 # TODO:
+# * fix resolve usages
 # * add config file?
 # * deal with duplicate hash's across trackers?
 # * if anything is in the retry queue, we'll never handle removed torrents. Not
@@ -222,8 +223,6 @@ def get_tor_meta(base_torrent_file, args):
     single_file_torrent = b'files' not in tord[b'info']
     with open(str(base_torrent_file) + '.rtorrent', 'rb') as fd:
         rtord = bdecode(fd.read())
-    #enct = detect(tord[b'info'][b'name'])['encoding']
-    #encrt = detect(rtord[b'directory'])['encoding']
     try:
         base_dir = decode_to_path(rtord[b'directory']).expanduser().resolve()
     except FileNotFoundError:
@@ -415,6 +414,8 @@ def remove_missing_hashes(con, sessfldr, no_action, args=None):
         db_hash_data = {x[0]:x[1:] for x in c.fetchall()}
         c.close()
     rm_hashes = db_hash_data.keys() - fs_hashes
+    if not rm_hashes:
+        return rm_hashes
     rm_data = ["%s, '%s', %s" % t for t in
                sorted([(k, *db_hash_data[k]) for k in rm_hashes],
                      key=lambda x: x[1])]
@@ -435,25 +436,26 @@ def clean_tables(con, no_action, fs_file_set, args=None):
         c = con.execute('SELECT DISTINCT file FROM session_files;')
         db_file_set = {x for (x,) in c.fetchall()}
         c.close()
+    rmfiles = sorted(db_file_set - fs_file_set)
     with con:
-        rmfiles = sorted(db_file_set - fs_file_set)
-        if no_action:
-            print("Remove from session: '%s'" % tabnew_line_join(rmfiles))
-            return
-        logging.info("Remove from session: '%s'" % tabnew_line_join(rmfiles))
-        try:
-            if rmfiles:
-                c = con.execute("DELETE FROM session_files WHERE file IN (%s)" %
-                                ', '.join(('?') * len(rmfiles)), rmfiles)
-                rmcount = c.rowcount
-                c.close()
-            else:
-                rmcount = 0
-        except sqlite3.Error as e:
-            logging.exception("Error while removing from session_files")
+        if rmfiles:
+            if no_action:
+                print("Remove from session:\n'%s'" % tabnew_line_join(rmfiles))
+                return
+            logging.info("Remove from session:\n'%s'" % tabnew_line_join(rmfiles))
+            try:
+                if rmfiles:
+                    c = con.execute("DELETE FROM session_files WHERE file IN (%s)" %
+                                    ', '.join(('?') * len(rmfiles)), rmfiles)
+                    rmcount = c.rowcount
+                    c.close()
+                else:
+                    rmcount = 0
+            except sqlite3.Error as e:
+                logging.exception("Error while removing from session_files")
 
-        else:
-            logging.debug("Removed %d rows from session_files" % rmcount)
+            else:
+                logging.debug("Removed %d rows from session_files" % rmcount)
         try:
             hashrm = con.execute("""DELETE FROM torrent_data WHERE hash IN
                            (SELECT t.hash FROM torrent_data t
