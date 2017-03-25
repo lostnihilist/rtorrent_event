@@ -445,8 +445,7 @@ def clean_tables(con, no_action, fs_file_set, args=None):
         logging.info("Removed %d rows from torrent_data table" % hashrm)
     con.commit()
 
-def remove_orphan_files(con, no_action, fs_file_set, bypass_rt_running=False,
-                        args=None):
+def remove_orphan_files(con, no_action, fs_file_set, args=None):
     "remove files on disk not found in db"
     with con:
         c = con.execute('SELECT DISTINCT file FROM session_files;')
@@ -606,9 +605,7 @@ def clean(args):
     check_rtorrent_running(args.session, args.force)
     clean_tables(con, args.no_action, fs_file_set, args=args)
     if args.remove:
-        check_rtorrent_running(args.session, args.force)
-        remove_orphan_files(con, args.no_action, fs_file_set,
-                            bypass_rt_running=args.force, args=args)
+        remove_orphan_files(con, args.no_action, fs_file_set, args=args)
         if not args.no_action:
             prune_empty_directories(*args.paths)
     if not args.no_action:
