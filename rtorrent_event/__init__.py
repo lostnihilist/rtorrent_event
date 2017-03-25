@@ -292,7 +292,7 @@ def add_new_session_file(con, file, name, tracker, tor_files, no_action,
             logger("Hash already present: %s" % hash)
             return
         c.close()
-    logging.info("Adding name, hash, tracker to db: %s, '%s', %s" %
+    logging.info("Adding hash, name, tracker to db: %s, '%s', %s" %
                  (hash, name, tracker))
     tf_str = "Adding files:\n%s" % tabnew_line_join(tor_files)
     if no_action:
