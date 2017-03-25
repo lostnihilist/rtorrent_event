@@ -408,6 +408,27 @@ def rm_file_hook(con, file, args):
                  (hash, len(success), len(rmfiles), file_count))
     return list(success)
 
+def remove_missing_hashes(con, sessfldr, no_action, args=None):
+    fs_hashes = set(f.stem for f in sessfldr.glob('*.torrent'))
+    with con:
+        c = con.execute('SELECT DISTINCT hash, name, tracker FROM torrent_data;')
+        db_hash_data = {x[0]:x[1:] for x in c.fetchall()}
+        c.close()
+    rm_hashes = db_hash_data.keys() - fs_hashes
+    rm_data = ["%s, '%s', %s" % t for t in
+               sorted([(k, *db_hash_data[k]) for k in rm_hashes],
+                     key=lambda x: x[1])]
+    if no_action:
+        print("Remove hashes from db:\n%s" % tabnew_line_join(rm_data))
+        return rm_hashes
+    with con:
+        logging.info("Remove hashes from db:\n%s" % tabnew_line_join(rm_hashes))
+        con.executemany('DELETE FROM session_files WHERE hash = ?',
+                        ((h,) for h in rm_hashes))
+        con.executemany('DELETE FROM torrent_data WHERE hash = ?',
+                        ((h,) for h in rm_hashes))
+    return rm_hashes
+
 def clean_tables(con, no_action, fs_file_set, args=None):
     "Remove files in db not found on fs."
     with con:
@@ -601,6 +622,7 @@ def clean(args):
                           detect_types=sqlite3.PARSE_DECLTYPES)
     check_rtorrent_running(args.session, args.force)
     populate_session_tbl(con, args.session, args.no_action, args=args)
+    remove_missing_hashes(con, args.session, args.no_action, args=args)
     fs_file_set = build_fs_file_set(*args.paths)
     check_rtorrent_running(args.session, args.force)
     clean_tables(con, args.no_action, fs_file_set, args=args)
