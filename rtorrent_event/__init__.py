@@ -218,16 +218,16 @@ def build_fs_file_set(*paths):
 
 def get_tor_meta(base_torrent_file, args):
     "return name, tracker, and list of files associated with base_torent_file"
-    with open(str(base_torrent_file), 'rb') as fd:
-        tord = bdecode(fd.read())
-    single_file_torrent = b'files' not in tord[b'info']
-    with open(str(base_torrent_file) + '.rtorrent', 'rb') as fd:
-        rtord = bdecode(fd.read())
     try:
+        with open(str(base_torrent_file), 'rb') as fd:
+            tord = bdecode(fd.read())
+        with open(str(base_torrent_file) + '.rtorrent', 'rb') as fd:
+            rtord = bdecode(fd.read())
         base_dir = decode_to_path(rtord[b'directory']).expanduser().resolve()
     except FileNotFoundError:
         raise rTorFileNotFoundError("No data found for: %s" %
                                     base_torrent_file.stem)
+    single_file_torrent = b'files' not in tord[b'info']
     name = tord[b'info'][b'name'].decode('utf-8')
     trackerp = urlparse(tord[b'announce'])
     tracker = (trackerp.hostname if trackerp.hostname
@@ -392,12 +392,12 @@ def rm_file_hook(con, file, args):
     file_count = c.fetchall()[0][0]
     c.close()
     if args.no_action:
-        print("Remove files:\n%s" % tabnew_line_join(rmfiles))
+        print("Remove from fs:\n%s" % tabnew_line_join(rmfiles))
         return rmfiles
     success = deque()
     for file in rmfiles:
         try:
-            logging.debug("Remove files: '%s'" % str(file))
+            logging.debug("Remove from fs: '%s'" % str(file))
             file.unlink()
         except (OSError, IOError) as e:
             logging.exception("Could not remove file: '%s'" % str(file))
