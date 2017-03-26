@@ -218,11 +218,11 @@ def build_fs_file_set(*paths):
 
 def get_tor_meta(base_torrent_file, args):
     "return name, tracker, and list of files associated with base_torent_file"
+    with open(str(base_torrent_file), 'rb') as fd:
+        tord = bdecode(fd.read())
+    with open(str(base_torrent_file) + '.rtorrent', 'rb') as fd:
+        rtord = bdecode(fd.read())
     try:
-        with open(str(base_torrent_file), 'rb') as fd:
-            tord = bdecode(fd.read())
-        with open(str(base_torrent_file) + '.rtorrent', 'rb') as fd:
-            rtord = bdecode(fd.read())
         base_dir = decode_to_path(rtord[b'directory']).expanduser().resolve()
     except FileNotFoundError:
         raise rTorFileNotFoundError("No data found for: %s" %
@@ -423,7 +423,7 @@ def remove_missing_hashes(con, sessfldr, no_action, args=None):
         print("Remove hashes from db:\n%s" % tabnew_line_join(rm_data))
         return rm_hashes
     with con:
-        logging.info("Remove hashes from db:\n%s" % tabnew_line_join(rm_hashes))
+        logging.info("Remove hashes from db:\n%s" % tabnew_line_join(rm_data))
         con.executemany('DELETE FROM session_files WHERE hash = ?',
                         ((h,) for h in rm_hashes))
         con.executemany('DELETE FROM torrent_data WHERE hash = ?',
@@ -474,7 +474,7 @@ def remove_orphan_files(con, no_action, fs_file_set, args=None):
         c = con.execute('SELECT DISTINCT file FROM session_files;')
         db_file_set = {x for (x,) in c.fetchall()}
         c.close()
-    for file in fs_file_set - db_file_set:
+    for file in sorted(fs_file_set - db_file_set):
         if args.paths and not any(is_parent(p, file) for p in args.paths):
             continue
         if no_action:
@@ -512,7 +512,10 @@ def import_user(file):
 
 def hooks_and_add_torrent(con, path, args):
     "handle a new torrent file by running hooks and adding to db"
-    name, tracker, torfiles = get_tor_meta(path, args)
+    try:
+        name, tracker, torfiles = get_tor_meta(path, args)
+    except FileNotFoundError:
+        return False
     hook = getattr(hooks, 'pre_add', None)
     if hook:
         logging.debug("Running pre_add.")
@@ -523,6 +526,7 @@ def hooks_and_add_torrent(con, path, args):
     if hook:
         logging.debug("Running post_add.")
         hook(con, path, args)
+    return True
 
 def hooks_and_remove_torrent(con, path, args, queues):
     """
@@ -559,7 +563,7 @@ def inotify_loop(con, inot, args, queues, qfuncs, inot_funcs):
         if filename.lower().endswith(b'.new'):
             filename = filename[:-4]
         path = decode_to_path(watch_path, filename)
-        inot_key = (path.name.split('.')[-1], tuple(type_names))
+        inot_key = (path.suffix[1:], tuple(type_names))
         if inot_key in inot_funcs:
             inot_funcs[inot_key](path)
 
