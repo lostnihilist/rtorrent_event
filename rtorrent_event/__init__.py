@@ -275,20 +275,19 @@ def populate_session_tbl(con, sessfldr, no_action, args=None):
             logging.warning("No data found for hash: %s" % file.stem)
             continue
         add_new_session_file(con, file, name, tracker, torfiles, no_action,
-                             args=args, commit=False, exists='debug')
+                             args=args, commit=False)
     if not no_action:
         con.commit()
 
 def add_new_session_file(con, file, name, tracker, tor_files, no_action,
-                         args=None, commit=True, exists='warn'):
+                         args=None, commit=True):
     "add session file found at file with name, tracker, and file list to db"
     hash = file.stem
     with con:
         c = con.execute('SELECT 1 FROM torrent_data WHERE hash = ?', (hash,))
         if c.fetchall():
             c.close()
-            logger = getattr(logging, exists)
-            logger("Hash already present: %s" % hash)
+            logging.debug("Hash already present: %s" % hash)
             return
         c.close()
     logging.info("Adding hash, name, tracker to db: %s, '%s', %s" %
