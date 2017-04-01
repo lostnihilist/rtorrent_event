@@ -208,6 +208,35 @@ def tabnew_line_join(objs):
     "join objs with newline, prepending each line with tab"
     return '\n'.join('\t%s' % str(x) for x in objs)
 
+def human_filesize(size, binary=True, digits=1, unit=None, bits=False,
+                   inbinary=True, inunit='', inbits=False):
+    """
+        convert number of bytes to human readable size as string
+
+        binary: use 1024 system. False to use decimal. iB versus B in output
+        digits: how many digits after decimal point to report
+        unit: None to determine automatically, else one of KMGTPEZ,
+              '' for Bytes.
+        bits: output in bits or bytes (default: bytes) (b vs B in output)
+        inbinary: input in binary, applies only if inunit != ''
+        inunit: '' for bytes, KMGTPEZ for higher order
+        inbits: is the input in bits or bytes. default bytes
+    """
+    fmt = "%%1.%df %%s%%s" % digits
+    units = ('', 'K', 'M', 'G', 'T', 'P', 'E', 'Z')
+    divsuf = [(1000, 'B'), (1024, 'iB')]
+    size *= divsuf[inbinary][0]**units.index(inunit) / (1,8)[inbits]*(1,8)[bits]
+    div, suf = divsuf[binary]
+    if size <= 0: # log(0) undefined
+        unit = ''
+    unit = (unit if unit is not None else
+            units[min(math.floor(math.log(size, div)), len(units)-1)])
+    size /= div ** units.index(unit)
+    unit = unit if unit != 'K' or binary else 'k' # strictly, in SI k not K
+    suf = 'B' if unit == '' else suf
+    suf = suf.lower() if bits else suf
+    return fmt % (size, unit, suf)
+
 def build_fs_file_set(*paths):
     "Return a set of PosixPath objects representing the files in paths"
     s = set()
@@ -390,21 +419,15 @@ def rm_file_hook(con, file, args):
     c.execute('SELECT count(*) FROM session_files WHERE hash = ?', (hash,))
     file_count = c.fetchall()[0][0]
     c.close()
+    done_rmfiles, rmsize = rm_files(rmfiles, args.no_action, args.paths)
+    fmt_str = "Rm stats for hash %s removed/removable/total/size: %d/%d/%d/%s"
     if args.no_action:
-        print("Remove from fs:\n%s" % tabnew_line_join(rmfiles))
-        return rmfiles
-    success = deque()
-    for file in rmfiles:
-        try:
-            logging.debug("Remove from fs: '%s'" % str(file))
-            file.unlink()
-        except (OSError, IOError) as e:
-            logging.exception("Could not remove file: '%s'" % str(file))
-        else:
-            success.append(file)
-    logging.info("File counts for hash %s removed/removable/rotal: %d/%d/%d" %
-                 (hash, len(success), len(rmfiles), file_count))
-    return list(success)
+        print(fmt_str % (hash, len(done_rmfiles), len(rmfiles), file_count,
+                         human_filesize(rmsize)))
+    else:
+        logging.info(fmt_str % (hash, len(done_rmfiles), len(rmfiles),
+                                file_count, human_filesize(rmsize)))
+    return(done_rmfiles)
 
 def remove_missing_hashes(con, sessfldr, no_action, args=None):
     fs_hashes = set(f.stem for f in sessfldr.glob('*.torrent'))
@@ -467,23 +490,42 @@ def clean_tables(con, no_action, fs_file_set, args=None):
         logging.info("Removed %d rows from torrent_data table" % hashrm)
     con.commit()
 
+def rm_files(files, no_action, parent_paths, log_level='debug'):
+    """
+        rm sequence of files and return list of files and total size removed
+
+        no_action: just print what would happen
+        parent_paths: only remove if the file is in one of the listed parent paths
+        log_level: at what level log level to print normal file rm op
+    """
+    logger = getattr(logging, log_level)
+    success, rm_size = deque(), 0
+    for file in files:
+        if parent_paths and not any(is_parent(p, file) for p in parent_paths):
+            continue
+        if no_action:
+            print("Remove from fs: '%s'" % str(file))
+            success.append(file)
+            rm_size += file.stat().st_size
+            continue
+        try:
+            logger("Remove from fs: '%s'" % str(file))
+            fsize = file.stat().st_size
+            file.unlink()
+        except (OSError, IOError) as e:
+            logging.exception("Could not remove file from fs: '%s'" % str(file))
+        else:
+            success.append(file)
+            rm_size += fsize
+    return list(success), rm_size
+
 def remove_orphan_files(con, no_action, fs_file_set, args=None):
     "remove files on disk not found in db"
     with con:
         c = con.execute('SELECT DISTINCT file FROM session_files;')
         db_file_set = {x for (x,) in c.fetchall()}
         c.close()
-    for file in sorted(fs_file_set - db_file_set):
-        if args.paths and not any(is_parent(p, file) for p in args.paths):
-            continue
-        if no_action:
-            print("Remove from fs: '%s'" % str(file))
-            continue
-        try:
-            logging.info("Remove from fs: '%s'" % str(file))
-            file.unlink()
-        except (OSError, IOError) as e:
-            logging.exception("Could not remove from fs: '%s'" % str(file))
+    rm_files(sorted(fs_file_set - db_file_set), no_action, args.paths, 'info')
 
 def prune_empty_directories(*dirs):
     "Delete a tree of empty directories, will not delete dirs passed in."
