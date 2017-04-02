@@ -28,6 +28,7 @@
 #sys.argv.extend(('-v', '-v', '-v', '-r', '-n', '~/.config/rtorrent/session', '~/files', '~/seed'))
 import argparse
 import logging
+import math
 import os
 import re
 import sqlite3
