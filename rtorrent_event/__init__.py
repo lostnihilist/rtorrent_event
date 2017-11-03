@@ -734,11 +734,11 @@ def main(args):
         lockfile.write(str(os.getpid()))
         lockfile.close()
     except FileExistsError:
-        print("Lock file exists. Check to see if another instance is running."
+        print("Lock file exists. Check to see if another instance is running. "
               "If not, run with --clean-lockfile to remove the stale lockfile.",
               file=sys.stderr)
         exit(1)
-    else:
+    try:
         if args.clean:
             clean(args)
         elif args.daemon:
