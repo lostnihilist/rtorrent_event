@@ -135,6 +135,8 @@ def parse_args():
                     argument specified without argument, '%s' is used as the
                     hook file. See README for details on the hooks. 
                  """ % HOOK_FILE)
+    p.add-argument('--clean-lockfile', action='store_true',
+                   help="Remove a lockfile. I DO NOT CHECK IF IT IS STALE!")
     args = p.parse_args()
     args.paths = tuple(Path(x).expanduser().resolve() for x in args.paths)
     args.session = Path(args.session).expanduser()
