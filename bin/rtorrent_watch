@@ -1,0 +1,118 @@
+#!/usr/bin/python3.5
+
+import argparse
+import os
+import time
+
+from pathlib import Path
+from datetime import datetime
+
+import bencode
+
+import rtorrent_event
+# TODO:
+# * daemon
+# * logging
+
+
+now = datetime.now
+
+def parse_args_watch():
+    p = argparse.ArgumentParser(
+        description="Scan watch folders and rtorrent session, retouching unloaded files.")
+    p.add_argument('session', action='store', type=str,
+                   help="session file location")
+    p.add_argument('watch', action='store', nargs='+',
+                   help="rtorrent watch folder locations.")
+    p.add_argument('-r', '--recursive', action='store_true',
+                   help="find files to watch recursively.")
+    p.add_argument('-s', '--sleep', action='store', default=60, type=int,
+           help="How long to sleep between path walks. default: %(default)s.")
+    p.add_argument("--min-age", action='store', default=120,
+        help="How old must the last mod time be before we retouch. default: %(default)s.")
+    p.add_argument("--use-db", action='store_true',
+        help="Use rtorrent_event db to get session file data instead of walking. "
+             "Raises an error if rtorrent_event is not running (checks lockfile).")
+    args = p.parse_args()
+    args.session = Path(args.session).expanduser()
+    args.watch = [Path(x).expanduser() for x in args.watch]
+    if not args.session.is_dir():
+        p.error("Session directory must exist and be a directory.")
+    if not all(x.is_dir() for x in args.watch):
+        p.error("Watch directories must exist and be directories.")
+    return args
+
+def walk_torrents(*watches, recursive=False, ext=".torrent"):
+    """
+        generator of Paths of suspected torrents in watches directories
+
+        suspicion based on ext file extension, case insensitive
+    """
+    if recursive:
+        for watch in watches:
+            for pd, cds, fs, in os.walk(str(watch)):
+                for file in (Path(pd, f) for f in fs):
+                    if file.suffix.lower() == ext:
+                        yield file
+    else:
+        for watch in watches:
+            yield from (f for f in watch.iterdir() if f.is_file() and
+                        f.suffix.lower() == ext)
+
+def scan_torrent(*dirs, recursive=False, known_loaded=(), ext=".torrent"):
+    known_loaded = set(known_loaded)
+    yield from (f for f in walk_torrents(*dirs, recursive=recursive, ext=ext)
+                if f in known_loaded or try_bread(f))
+
+def scan_watch(*watches, recursive=False, known_loaded=()):
+    """
+        generator of Paths of valid torrents in watches directories
+
+        skip reading files in known_loaded
+    """
+    yield from scan_torrent(*watches, recursive=recursive,
+                            known_loaded=known_loaded)
+
+def scan_session(session, known_loaded=()):
+    """
+        generator of Paths of watch files found in *.rtorrent files in session
+
+        skip reading files in known_loaded
+    """
+    new_loaded = {}
+    for rtor in scan_torrent(session, known_loaded=known_loaded, ext=".rtorrent"):
+        if rtor in known_loaded:
+            new_loaded[rtor] = known_loaded[rtor]
+        else:
+            tor = bencode.bread(rtor)
+            watch = tor.get('tied_to_file')
+            new_loaded[rtor] = Path(watch).expanduser() if watch else None
+    return new_loaded
+
+def try_bread(file):
+    try:
+        bencode.bread(file)
+    except bencode.BencodeDecodeError:
+        return False
+    else:
+        return True
+
+def file_age(pth):
+    return datetime.fromtimestamp(pth.stat().st_mtime)
+
+def main(args):
+    torrents_in_session = {}
+    while True:
+        torrents_in_watch = set(scan_watch(*args.watch, recursive=args.recursive,
+                                           known_loaded=torrents_in_session))
+        torrents_in_session = scan_session(args.session, torrents_in_session)
+        for watchf in torrents_in_watch - set(torrents_in_session.values()):
+            if (now() - file_age(watchf)).total_seconds() > args.min_age:
+                print("Touching %s" % str(watchf))
+                watchf.touch()
+        time.sleep(args.sleep)
+
+if __name__ == "__main__":
+    args = parse_args_watch()
+    main(args)
+
