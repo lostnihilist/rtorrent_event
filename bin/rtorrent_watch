@@ -2,14 +2,15 @@
 
 import argparse
 import os
+import tempfile
 import time
 
-from pathlib import Path
 from datetime import datetime
+from pathlib import Path
+from shutil import move
 
 import bencode
 
-import rtorrent_event
 # TODO:
 # * daemon
 # * logging
@@ -19,27 +20,33 @@ now = datetime.now
 
 def parse_args_watch():
     p = argparse.ArgumentParser(
-        description="Scan watch folders and rtorrent session, retouching unloaded files.")
+        description="Scan watch folders and rtorrent session, swapping unloaded files.")
     p.add_argument('session', action='store', type=str,
                    help="session file location")
     p.add_argument('watch', action='store', nargs='+',
                    help="rtorrent watch folder locations.")
     p.add_argument('-r', '--recursive', action='store_true',
                    help="find files to watch recursively.")
-    p.add_argument('-s', '--sleep', action='store', default=60, type=int,
-           help="How long to sleep between path walks. default: %(default)s.")
-    p.add_argument("--min-age", action='store', default=120,
+    p.add_argument('-s', '--sleep', action='store', default=300, type=int,
+       help="How long to sleep between path walks. "
+            "Make sure to give time for rtorrent to scan. default: %(default)s.")
+    p.add_argument("--min-age", action='store', default=600,
         help="How old must the last mod time be before we retouch. default: %(default)s.")
-    p.add_argument("--use-db", action='store_true',
-        help="Use rtorrent_event db to get session file data instead of walking. "
-             "Raises an error if rtorrent_event is not running (checks lockfile).")
+    p.add_argument("--new-name", action='store_true', default=False,
+        help="When moving .torrent from /tmp to watch location, use new name. "
+             "Helps in case a bad name is stopping rtorrent from reading, possibly.")
+    p.add_argument("--tmp", action='store', type=str, default='/tmp',
+        help="directory to use for tempfiles when swapping, defaults to /tmp")
     args = p.parse_args()
     args.session = Path(args.session).expanduser()
     args.watch = [Path(x).expanduser() for x in args.watch]
+    args.tmp = Path(args.tmp).expanduser()
     if not args.session.is_dir():
         p.error("Session directory must exist and be a directory.")
     if not all(x.is_dir() for x in args.watch):
         p.error("Watch directories must exist and be directories.")
+    if not args.tmp.is_dir():
+        p.error("Temp directory must exist and be a directory.")
     return args
 
 def walk_torrents(*watches, recursive=False, ext=".torrent"):
@@ -100,17 +107,43 @@ def try_bread(file):
 def file_age(pth):
     return datetime.fromtimestamp(pth.stat().st_mtime)
 
+def temp_path(suffix="", prefix="tmp", dir="/tmp"):
+    "like mktemp, but returns a Path"
+    return Path(tempfile.mktemp(suffix, prefix, str(dir)))
+
+def move_to_tmp(src, suffix="", prefix="tmp", dir="/tmp"):
+    """
+        move src to a temporary directory dir, returns Path of destination.
+
+        would be nice to know how to do this in a safe/atomic manner
+    """
+    tmp = temp_path(suffix=suffix, prefix=prefix, dir=str(dir))
+    move(str(src), str(tmp))
+    return tmp
+
 def main(args):
     torrents_in_session = {}
+    move_pair = {}
     while True:
         torrents_in_watch = set(scan_watch(*args.watch, recursive=args.recursive,
                                            known_loaded=torrents_in_session))
         torrents_in_session = scan_session(args.session, torrents_in_session)
         for watchf in torrents_in_watch - set(torrents_in_session.values()):
             if (now() - file_age(watchf)).total_seconds() > args.min_age:
-                print("Touching %s" % str(watchf))
-                watchf.touch()
-        time.sleep(args.sleep)
+                print("'tmp' %s" % str(watchf), end="")
+                tmp = move_to_tmp(watchf, dir=args.tmp)
+                move_pair[watchf] = tmp
+                print(" to '%s'" % str(tmp))
+        for watchf, tmpf in list(move_pair.items()): # allows del during iter
+            dest = temp_path(dir=watchf.parent) if args.new_name else watchf
+            if dest == watchf:
+                print("'%s' from '%s'" % (str(dest), str(tmpf)))
+            else:
+                print("'%s' from '%s' originally '%s'" % (str(dest), str(tmpf),
+                                                          str(watchf)))
+            move(str(tmpf), str(dest))
+            del move_pair[watchf]
+        time.sleep(args.sleep) # sleep after move back to allow rt to read
 
 if __name__ == "__main__":
     args = parse_args_watch()
