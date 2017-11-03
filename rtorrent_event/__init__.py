@@ -12,6 +12,7 @@
 #   pip3 install --user daemons
 
 # TODO:
+# * re-touch watch files if not loaded for, say 2+ minutes
 # * block multiple runs for the love of god, even with --clean and such!
 # * fix resolve usages
 # * add config file?
@@ -51,6 +52,7 @@ from inotify.constants import IN_CREATE, IN_DELETE
 LOG_FILE = "~/.config/rtorrent_event/event.log"
 SQL_FILE = "~/.config/rtorrent_event/file.db"
 HOOK_FILE = "~/.config/rtorrent_event/hooks.py"
+LOCK_FILE = "~/.config/rtorrent_event/rtorrent_event.lock"
 PID_FILE = "~/.local/var/run/rtorrent_event.pid"
 SLEEP_TIME = 3 #seconds
 
@@ -719,12 +721,30 @@ def clean(args):
 
 def main(args):
     "do work depending on args"
-    if args.clean:
-        clean(args)
-    elif args.daemon:
-        from daemons import daemonizer
-        dmn = daemonizer.run(pidfile=str(Path(PID_FILE).expanduser()))(inotify)
-        dmn(args)
+    lockfile_path = Path(LOCK_FILE).expanduser()
+    if args.clean_lockfile and lockfile_path.exists():
+        lockfile_path.unlink()
+    # potential problems with daemon:
+    # a) the pid is different due to the whole forking thing
+    # b) not sure how the try/finally will interact with the daemon
+    try:
+        lockfile = open(str(lockfile_path), 'x')
+        lockfile.write(str(os.getpid()))
+        lockfile.close()
+    except FileExistsError:
+        print("Lock file exists. Check to see if another instance is running."
+              "If not, run with --clean-lockfile to remove the stale lockfile.",
+              file=sys.stderr)
+        exit(1)
     else:
-        inotify(args)
+        if args.clean:
+            clean(args)
+        elif args.daemon:
+            from daemons import daemonizer
+            dmn = daemonizer.run(pidfile=str(Path(PID_FILE).expanduser()))(inotify)
+            dmn(args)
+        else:
+            inotify(args)
+    finally:
+        lockfile_path.unlink()
 
