@@ -548,7 +548,7 @@ def rm_files(files, no_action, parent_paths, log_level='debug'):
             rm_size += fsize
     else:
         if (com_par is not None and not no_action and parent_paths and
-                        any(isparent(p, com_par) for p in parent_paths)):
+                        any(is_parent(p, com_par) for p in parent_paths)):
             try:
                 com_par.rmdir()
             except PermissionError:
