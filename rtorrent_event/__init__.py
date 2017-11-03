@@ -172,6 +172,8 @@ def common_parent(*files, are_absolute=False):
 
         all files must exist while call is executing
     """
+    if not files:
+        return None
     if not are_absolute:
         files = [x.absolute() for x in files]
     base_dir = files[0] if files[0].is_dir() else files[0].parent
@@ -179,7 +181,7 @@ def common_parent(*files, are_absolute=False):
         for i, (bp, cp) in enumerate(zip(base_dir.parts, cmpfile.parts)):
             if bp != cp:
                 if i < 0:
-                    raise ValueError("no common parent!")
+                    return None
                 # have to map from parts idx to parents idx, annoying
                 parent_idx = len(base_dir.parts) - 1 - i
                 base_dir = base_dir.parents[parent_idx]
@@ -525,10 +527,7 @@ def rm_files(files, no_action, parent_paths, log_level='debug'):
     """
     logger = getattr(logging, log_level)
     success, rm_size = deque(), 0
-    try:
-        com_par = common_parent(*files)
-    except ValueError:
-        com_par = None
+    com_par = common_parent(*files)
     for file in files:
         if parent_paths and not any(is_parent(p, file) for p in parent_paths):
             continue
