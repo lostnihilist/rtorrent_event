@@ -12,7 +12,6 @@
 #   pip3 install --user daemons
 
 # TODO:
-# * re-touch watch files if not loaded for, say 2+ minutes
 # * block multiple runs for the love of god, even with --clean and such!
 # * fix resolve usages
 # * add config file?
@@ -23,6 +22,7 @@
 #   loop except when an unexpected exception occurs
 # * better logging, especially with --clean
 # * better torrent bdecoding (i.e. keys etc to strings)
+#   https://github.com/lostnihilist/bencode.py
 # * use better transaction handling to speed up insertions
 # * add lock file (maybe daemon takes care of this?); untested
 
@@ -135,7 +135,7 @@ def parse_args():
                     argument specified without argument, '%s' is used as the
                     hook file. See README for details on the hooks. 
                  """ % HOOK_FILE)
-    p.add-argument('--clean-lockfile', action='store_true',
+    p.add_argument('--clean-lockfile', action='store_true',
                    help="Remove a lockfile. I DO NOT CHECK IF IT IS STALE!")
     args = p.parse_args()
     args.paths = tuple(Path(x).expanduser().resolve() for x in args.paths)
