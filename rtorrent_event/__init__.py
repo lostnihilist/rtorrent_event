@@ -12,6 +12,7 @@
 #   pip3 install --user daemons
 
 # TODO:
+# * log to logfile and stdout?
 # * block multiple runs for the love of god, even with --clean and such!
 # * fix resolve usages
 # * add config file?
@@ -551,7 +552,7 @@ def rm_files(files, no_action, parent_paths, log_level='debug'):
                         any(is_parent(p, com_par) for p in parent_paths)):
             try:
                 com_par.rmdir()
-            except PermissionError:
+            except (OSError, PermissionError):
                 pass
             else:
                 logger("Removed dir from fs: '%s'" % str(com_par))
