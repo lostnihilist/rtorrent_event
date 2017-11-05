@@ -1,6 +1,7 @@
 #!/usr/bin/python3.5
 
 import argparse
+import logging
 import os
 import tempfile
 import time
@@ -13,7 +14,10 @@ import bencode
 
 # TODO:
 # * daemon
-# * logging
+# * don't run if rtorrent isn't running?
+# * option to touch instead of move
+
+LOGFILE = Path('~/.config/rtorrent_event/watch.log')
 
 
 now = datetime.now
@@ -37,6 +41,14 @@ def parse_args_watch():
              "Helps in case a bad name is stopping rtorrent from reading, possibly.")
     p.add_argument("--tmp", action='store', type=str, default='/tmp',
         help="directory to use for tempfiles when swapping, defaults to /tmp")
+    p.add_argument('-v', '--verbose', action='count', default=0,
+                   help="Enable higher verbosity levels (up to 4 times).")
+    p.add_argument('--log-file', action='store', type=Path, default=LOGFILE,
+                   help="Where to store log output. default: %s" % str(LOGFILE))
+    p.add_argument('--no-log', action='store_true',
+                   help="do not write a log file.")
+    p.add_argument('-q', '--quiet', action='store_true',
+                   help="suppress output on stdout/stderr. Does not effect log file.")
     args = p.parse_args()
     args.session = Path(args.session).expanduser()
     args.watch = [Path(x).expanduser() for x in args.watch]
@@ -47,6 +59,7 @@ def parse_args_watch():
         p.error("Watch directories must exist and be directories.")
     if not args.tmp.is_dir():
         p.error("Temp directory must exist and be a directory.")
+    args.log_file = args.log_file.expanduser() if not args.no_log else None
     return args
 
 def walk_torrents(*watches, recursive=False, ext=".torrent"):
@@ -77,6 +90,8 @@ def scan_watch(*watches, recursive=False, known_loaded=()):
 
         skip reading files in known_loaded
     """
+    logging.debug("scanning watch dirs %s" %
+                  ','.join("'%s'" % str(x) for x in watches))
     yield from scan_torrent(*watches, recursive=recursive,
                             known_loaded=known_loaded)
 
@@ -86,6 +101,7 @@ def scan_session(session, known_loaded=()):
 
         skip reading files in known_loaded
     """
+    logging.debug("scanning session dir '%s'" % str(session))
     new_loaded = {}
     for rtor in scan_torrent(session, known_loaded=known_loaded, ext=".rtorrent"):
         if rtor in known_loaded:
@@ -118,6 +134,7 @@ def move_to_tmp(src, suffix="", prefix="tmp", dir="/tmp"):
         would be nice to know how to do this in a safe/atomic manner
     """
     tmp = temp_path(suffix=suffix, prefix=prefix, dir=str(dir))
+    logging.debug("moving %s to %s" % (str(src), str(tmp)))
     move(str(src), str(tmp))
     return tmp
 
@@ -130,22 +147,37 @@ def main(args):
         torrents_in_session = scan_session(args.session, torrents_in_session)
         for watchf in torrents_in_watch - set(torrents_in_session.values()):
             if (now() - file_age(watchf)).total_seconds() > args.min_age:
-                print("'tmp' %s" % str(watchf), end="")
+                logging.info("'tmp' %s" % str(watchf), end="")
                 tmp = move_to_tmp(watchf, dir=args.tmp)
                 move_pair[watchf] = tmp
-                print(" to '%s'" % str(tmp))
+                logging.info(" to '%s'" % str(tmp))
         for watchf, tmpf in list(move_pair.items()): # allows del during iter
             dest = temp_path(dir=watchf.parent) if args.new_name else watchf
             if dest == watchf:
-                print("'%s' from '%s'" % (str(dest), str(tmpf)))
+                logging.info("'%s' from '%s'" % (str(dest), str(tmpf)))
             else:
-                print("'%s' from '%s' originally '%s'" % (str(dest), str(tmpf),
-                                                          str(watchf)))
+                logging.info("'%s' from '%s' originally '%s'" % (str(dest),
+                                                        str(tmpf), str(watchf)))
             move(str(tmpf), str(dest))
             del move_pair[watchf]
+        logging.debug("Sleeping for %d" % args.sleep)
         time.sleep(args.sleep) # sleep after move back to allow rt to read
 
 if __name__ == "__main__":
     args = parse_args_watch()
+    formatter = logging.Formatter('%(asctime)s - %(levelname)s: %(message)s')
+    rootlog = logging.getLogger()
+    loglevel = logging.ERROR - 10 * args.verbose
+    rootlog.setLevel(loglevel)
+    if not args.quiet:
+        console = logging.StreamHandler()
+        console.setFormatter(formatter)
+        rootlog.addHandler(console)
+    if args.log_file:
+        logfile = logging.FileHandler(str(args.log_file))
+        logfile.setFormatter(formatter)
+        rootlog.addHandler(logfile)
+    if args.quiet and not args.log_file:
+        rootlog.disabled = True
     main(args)
 
