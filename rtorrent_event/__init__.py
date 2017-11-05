@@ -51,10 +51,10 @@ from inotify.constants import IN_CREATE, IN_DELETE
 #from chardet import detect
 
 
-LOG_FILE = "~/.config/rtorrent_event/event.log"
-SQL_FILE = "~/.config/rtorrent_event/file.db"
+LOG_FILE = Path("~/.config/rtorrent_event/event.log")
+SQL_FILE = Path("~/.config/rtorrent_event/file.db")
 HOOK_FILE = "~/.config/rtorrent_event/hooks.py"
-PID_FILE = "~/.local/var/run/rtorrent_event.pid"
+PID_FILE = Path("~/.local/var/run/rtorrent_event.pid").expanduser()
 SLEEP_TIME = 3 #seconds
 
 def adapt_path(path):
@@ -103,8 +103,13 @@ def parse_args():
                 """ % LOG_FILE)
     p.add_argument('-f', '--force', action='store_true',
        help="Clean up even if rtorrent is running.")
-    p.add_argument('--log-file', action='store', default=None,
-                   help="What file to use as log file, defaults to stderr.")
+    p.add_argument('--log-file', action='store', default=LOG_FILE,
+                   help="What file to use as log file, defaults to %s." %
+                        str(LOG_FILE))
+    p.add_argument('--no-log', action='store_true',
+                   help="do not write a log file.")
+    p.add_argument('-q', '--quiet', action='store_true',
+           help="suppress output on stdout/stderr. Does not effect log file.")
     p.add_argument('-n', '--no-action', action='store_true',
            help="""
                    Print what would happen, but do not execute. Cannot use
@@ -125,8 +130,8 @@ def parse_args():
                    How long to sleep when no fs action is detected (seconds).
                    Default: %(default)s
                 """)
-    p.add_argument('--sql-file', action='store', default=SQL_FILE,
-                   help="Where to store history. Default: %(default)s")
+    p.add_argument('--sql-file', action='store', default=SQL_FILE, type=Path,
+                   help="Where to store history. Default: %s" % str(SQL_FILE))
     p.add_argument('-v', '--verbose', action='count', default=0,
                    help="Enable higher verbosity levels (up to 4 times).")
     p.add_argument('--hooks', nargs='?', action='store', default=None,
@@ -141,15 +146,14 @@ def parse_args():
     args = p.parse_args()
     args.paths = tuple(Path(x).expanduser().resolve() for x in args.paths)
     args.session = Path(args.session).expanduser()
-    args.sql_file = Path(args.sql_file).expanduser()
+    args.sql_file = args.sql_file.expanduser()
     if not args.session.is_dir():
         p.error("Session directory must exist and be a directory.")
     if not all(x.is_dir() for x in args.paths):
         p.error("Paths must exist and be a directories.")
     if args.daemon and args.no_action:
         p.error("Can only specify one of --no-action and --daemon.")
-    if args.daemon and args.log_file is None:
-        args.log_file = str(Path(LOG_FILE).expanduser())
+    args.log_file = args.log_file.expanduser() if not args.no_log else None
     if args.hooks:
         args.hooks = Path(args.hooks).expanduser()
         if not args.hooks.exists():
@@ -625,6 +629,22 @@ def hooks_and_remove_torrent(con, path, args, queues):
         logging.debug("Running post_remove.")
         hook(con, path, args, rmtup)
 
+def setup_logging(args):
+    formatter = logging.Formatter('%(asctime)s - %(levelname)s: %(message)s')
+    rootlog = logging.getLogger()
+    loglevel = logging.ERROR - 10 * args.verbose
+    rootlog.setLevel(loglevel)
+    if not args.quiet and not args.daemon:
+        console = logging.StreamHandler()
+        console.setFormatter(formatter)
+        rootlog.addHandler(console)
+    if args.log_file:
+        logfile = logging.FileHandler(str(args.log_file))
+        logfile.setFormatter(formatter)
+        rootlog.addHandler(logfile)
+    if args.quiet and not args.log_file:
+        rootlog.disabled = True
+
 def inotify_loop(con, inot, args, queues, qfuncs, inot_funcs):
     "loop over inotify event generator and dispatch as necessary"
     for event in inot.event_gen():
@@ -751,14 +771,14 @@ def clean(args, lockfile_path):
 
 def main(args):
     "do work depending on args"
-    lockfile_path = Path(PID_FILE).expanduser()
+    lockfile_path = PID_FILE
     if args.clean_lockfile and lockfile_path.exists():
         lockfile_path.unlink()
     if args.clean:
         clean(args, lockfile_path)
     elif args.daemon:
         from daemons import daemonizer
-        dmn = daemonizer.run(pidfile=str(Path(PID_FILE).expanduser()))(inotify)
+        dmn = daemonizer.run(pidfile=str(PID_FILE))(inotify)
         dmn(args)
     else:
         inotify_withlock(args, lockfile_path)

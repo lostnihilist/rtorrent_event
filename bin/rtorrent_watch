@@ -141,7 +141,24 @@ def move_to_tmp(src, suffix="", prefix="tmp", dir="/tmp"):
     move(str(src), str(tmp))
     return tmp
 
+def setup_logging(args):
+    formatter = logging.Formatter('%(asctime)s - %(levelname)s: %(message)s')
+    rootlog = logging.getLogger()
+    loglevel = logging.ERROR - 10 * args.verbose
+    rootlog.setLevel(loglevel)
+    if not args.quiet and not args.daemon:
+        console = logging.StreamHandler()
+        console.setFormatter(formatter)
+        rootlog.addHandler(console)
+    if args.log_file:
+        logfile = logging.FileHandler(str(args.log_file))
+        logfile.setFormatter(formatter)
+        rootlog.addHandler(logfile)
+    if args.quiet and not args.log_file:
+        rootlog.disabled = True
+
 def main(args):
+    setup_logging(args)
     torrents_in_session = {}
     move_pair = {}
     while True:
@@ -168,20 +185,6 @@ def main(args):
 
 if __name__ == "__main__":
     args = parse_args_watch()
-    formatter = logging.Formatter('%(asctime)s - %(levelname)s: %(message)s')
-    rootlog = logging.getLogger()
-    loglevel = logging.ERROR - 10 * args.verbose
-    rootlog.setLevel(loglevel)
-    if not args.quiet and not args.daemon:
-        console = logging.StreamHandler()
-        console.setFormatter(formatter)
-        rootlog.addHandler(console)
-    if args.log_file:
-        logfile = logging.FileHandler(str(args.log_file))
-        logfile.setFormatter(formatter)
-        rootlog.addHandler(logfile)
-    if args.quiet and not args.log_file:
-        rootlog.disabled = True
     if args.daemon:
         from daemons import daemonizer
         dmain = daemonizer.run(pidfile=str(PIDFILE.expanduser()))(main)
