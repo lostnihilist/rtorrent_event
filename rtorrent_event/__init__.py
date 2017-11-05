@@ -54,7 +54,6 @@ from inotify.constants import IN_CREATE, IN_DELETE
 LOG_FILE = "~/.config/rtorrent_event/event.log"
 SQL_FILE = "~/.config/rtorrent_event/file.db"
 HOOK_FILE = "~/.config/rtorrent_event/hooks.py"
-LOCK_FILE = "~/.config/rtorrent_event/rtorrent_event.lock"
 PID_FILE = "~/.local/var/run/rtorrent_event.pid"
 SLEEP_TIME = 3 #seconds
 
@@ -699,55 +698,68 @@ def inotify(args):
         inot.remove_watch(bytes(args.session))
         con.close()
 
-def clean(args):
-    """
-        make sure db synced with fs, and fs with db if args.remove is True.
-
-        preferably with rtorrent not running
-    """
-    con = sqlite3.connect(str(args.sql_file),
-                          detect_types=sqlite3.PARSE_DECLTYPES)
-    check_rtorrent_running(args.session, args.force)
-    populate_session_tbl(con, args.session, args.no_action, args=args)
-    remove_missing_hashes(con, args.session, args.no_action, args=args)
-    fs_file_set = build_fs_file_set(*args.paths)
-    clean_tables(con, args.no_action, fs_file_set, args=args)
-    if args.remove:
-        remove_orphan_files(con, args.no_action, fs_file_set, args=args)
-        if not args.no_action:
-            prune_empty_directories(*args.paths)
-    if not args.no_action:
-        logging.debug("Vacuum database.")
-        con.execute('VACUUM;')
-    con.commit()
-    con.close()
-
-def main(args):
-    "do work depending on args"
-    lockfile_path = Path(LOCK_FILE).expanduser()
-    if args.clean_lockfile and lockfile_path.exists():
-        lockfile_path.unlink()
-    # potential problems with daemon:
-    # a) the pid is different due to the whole forking thing
-    # b) not sure how the try/finally will interact with the daemon
+def inotify_withlock(args, lockfile_path):
     try:
         lockfile = open(str(lockfile_path), 'x')
         lockfile.write(str(os.getpid()))
         lockfile.close()
     except FileExistsError:
-        print("Lock file exists. Check to see if another instance is running. "
+        logging.error("Lock file exists. "
+              "Check to see if another instance is running. "
               "If not, run with --clean-lockfile to remove the stale lockfile.",
               file=sys.stderr)
         exit(1)
-    try:
-        if args.clean:
-            clean(args)
-        elif args.daemon:
-            from daemons import daemonizer
-            dmn = daemonizer.run(pidfile=str(Path(PID_FILE).expanduser()))(inotify)
-            dmn(args)
-        else:
-            inotify(args)
+    else:
+        inotify(args)
     finally:
         lockfile_path.unlink()
+
+def clean(args, lockfile_path):
+    """
+        make sure db synced with fs, and fs with db if args.remove is True.
+
+        preferably with rtorrent not running
+    """
+    try:
+        lockfile = open(str(lockfile_path), 'x')
+        lockfile.write(str(os.getpid()))
+        lockfile.close()
+    except FileExistsError:
+        logging.error("Lock file exists. "
+              "Check to see if another instance is running. "
+              "If not, run with --clean-lockfile to remove the stale lockfile.")
+        exit(1)
+    else:
+        con = sqlite3.connect(str(args.sql_file),
+                              detect_types=sqlite3.PARSE_DECLTYPES)
+        check_rtorrent_running(args.session, args.force)
+        populate_session_tbl(con, args.session, args.no_action, args=args)
+        remove_missing_hashes(con, args.session, args.no_action, args=args)
+        fs_file_set = build_fs_file_set(*args.paths)
+        clean_tables(con, args.no_action, fs_file_set, args=args)
+        if args.remove:
+            remove_orphan_files(con, args.no_action, fs_file_set, args=args)
+            if not args.no_action:
+                prune_empty_directories(*args.paths)
+        if not args.no_action:
+            logging.debug("Vacuum database.")
+            con.execute('VACUUM;')
+        con.commit()
+        con.close()
+    finally:
+        lockfile_path.unlink()
+
+def main(args):
+    "do work depending on args"
+    lockfile_path = Path(PID_FILE).expanduser()
+    if args.clean_lockfile and lockfile_path.exists():
+        lockfile_path.unlink()
+    if args.clean:
+        clean(args, lockfile_path)
+    elif args.daemon:
+        from daemons import daemonizer
+        dmn = daemonizer.run(pidfile=str(Path(PID_FILE).expanduser()))(inotify)
+        dmn(args)
+    else:
+        inotify_withlock(args, lockfile_path)
 
