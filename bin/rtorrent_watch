@@ -18,6 +18,7 @@ import bencode
 # * option to touch instead of move
 
 LOGFILE = Path('~/.config/rtorrent_event/watch.log')
+PIDFILE = Path("~/.local/var/run/rtorrent_watch.pid")
 
 
 now = datetime.now
@@ -31,6 +32,8 @@ def parse_args_watch():
                    help="rtorrent watch folder locations.")
     p.add_argument('-r', '--recursive', action='store_true',
                    help="find files to watch recursively.")
+    p.add_argument('-d', '--daemon', action='store_true',
+                   help="fork to a daemon. implies -q.")
     p.add_argument('-s', '--sleep', action='store', default=300, type=int,
        help="How long to sleep between path walks. "
             "Make sure to give time for rtorrent to scan. default: %(default)s.")
@@ -169,7 +172,7 @@ if __name__ == "__main__":
     rootlog = logging.getLogger()
     loglevel = logging.ERROR - 10 * args.verbose
     rootlog.setLevel(loglevel)
-    if not args.quiet:
+    if not args.quiet and not args.daemon:
         console = logging.StreamHandler()
         console.setFormatter(formatter)
         rootlog.addHandler(console)
@@ -179,5 +182,10 @@ if __name__ == "__main__":
         rootlog.addHandler(logfile)
     if args.quiet and not args.log_file:
         rootlog.disabled = True
-    main(args)
+    if args.daemon:
+        from daemons import daemonizer
+        dmain = daemonizer.run(pidfile=str(PIDFILE.expanduser()))(main)
+        dmain(args)
+    else:
+        main(args)
 
