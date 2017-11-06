@@ -12,8 +12,8 @@
 #   pip3 install --user daemons
 
 # TODO:
-# * log to logfile and stdout?
-# * block multiple runs for the love of god, even with --clean and such!
+# * make logging work before and after daemonizing things so we get the PID in
+#   the log file too
 # * fix resolve usages
 # * add config file?
 # * deal with duplicate hash's across trackers?
@@ -24,8 +24,7 @@
 # * better logging, especially with --clean
 # * better torrent bdecoding (i.e. keys etc to strings)
 #   https://github.com/lostnihilist/bencode.py
-# * use better transaction handling to speed up insertions
-# * add lock file (maybe daemon takes care of this?); untested
+# * use better transaction handling to speed up insertions?
 
 
 #sys.argv.extend(('-v', '-v', '-v', '-r', '-n', '~/.config/rtorrent/session', '~/files', '~/seed'))
@@ -637,10 +636,12 @@ def setup_logging(args):
     if not args.quiet and not args.daemon:
         console = logging.StreamHandler()
         console.setFormatter(formatter)
+        console.setLevel(loglevel)
         rootlog.addHandler(console)
     if args.log_file:
         logfile = logging.FileHandler(str(args.log_file))
         logfile.setFormatter(formatter)
+        logfile.setLevel(loglevel)
         rootlog.addHandler(logfile)
     if args.quiet and not args.log_file:
         rootlog.disabled = True
