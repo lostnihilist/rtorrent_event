@@ -13,7 +13,6 @@ from shutil import move
 import bencode
 
 # TODO:
-# * daemon
 # * don't run if rtorrent isn't running?
 # * option to touch instead of move
 
@@ -143,16 +142,19 @@ def move_to_tmp(src, suffix="", prefix="tmp", dir="/tmp"):
 
 def setup_logging(args):
     formatter = logging.Formatter('%(asctime)s - %(levelname)s: %(message)s')
-    rootlog = logging.getLogger()
     loglevel = logging.ERROR - 10 * args.verbose
+    rootlog = logging.getLogger()
+    rootlog.handlers = []
     rootlog.setLevel(loglevel)
     if not args.quiet and not args.daemon:
         console = logging.StreamHandler()
         console.setFormatter(formatter)
+        console.setLevel(loglevel)
         rootlog.addHandler(console)
     if args.log_file:
         logfile = logging.FileHandler(str(args.log_file))
         logfile.setFormatter(formatter)
+        logfile.setLevel(loglevel)
         rootlog.addHandler(logfile)
     if args.quiet and not args.log_file:
         rootlog.disabled = True
