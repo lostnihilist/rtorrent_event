@@ -136,7 +136,7 @@ def move_to_tmp(src, suffix="", prefix="tmp", dir="/tmp"):
         would be nice to know how to do this in a safe/atomic manner
     """
     tmp = temp_path(suffix=suffix, prefix=prefix, dir=str(dir))
-    logging.debug("moving %s to %s" % (str(src), str(tmp)))
+    logging.info("moving '%s' to '%s'" % (str(src), str(tmp)))
     move(str(src), str(tmp))
     return tmp
 
@@ -169,12 +169,11 @@ def main(args):
         torrents_in_session = scan_session(args.session, torrents_in_session)
         for watchf in torrents_in_watch - set(torrents_in_session.values()):
             if (now() - file_age(watchf)).total_seconds() > args.min_age:
-                logging.info("'tmp' %s" % str(watchf), end="")
                 tmp = move_to_tmp(watchf, dir=args.tmp)
                 move_pair[watchf] = tmp
-                logging.info(" to '%s'" % str(tmp))
+        time.sleep(30)
         for watchf, tmpf in list(move_pair.items()): # allows del during iter
-            dest = temp_path(dir=watchf.parent) if args.new_name else watchf
+            dest = temp_path(suffix=".torrent", dir=watchf.parent) if args.new_name else watchf
             if dest == watchf:
                 logging.info("'%s' from '%s'" % (str(dest), str(tmpf)))
             else:
