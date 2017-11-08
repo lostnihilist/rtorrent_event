@@ -670,6 +670,7 @@ def inotify_loop(con, inot, args, queues, qfuncs, inot_funcs):
 
 def inotify(args):
     "Setup to run inotify loop"
+    setup_logging(args)
     inot = Inotify()
     inot.add_watch(bytes(args.session), mask=IN_CREATE ^ IN_DELETE)
     global hooks
@@ -741,6 +742,7 @@ def clean(args, lockfile_path):
 
         preferably with rtorrent not running
     """
+    setup_logging(args)
     try:
         lockfile = open(str(lockfile_path), 'x')
         lockfile.write(str(os.getpid()))
