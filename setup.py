@@ -11,7 +11,7 @@ setup(name='rtorrent_event',
       author_email='lostnihilist@gmail.com',
       install_requires=['inotify',],
       keywords='rtorrent',
-      scripts=['bin/rtorrent_event'],
+      scripts=['bin/rtorrent_event', 'bin/rtorrent_watch'],
       packages=['rtorrent_event'],
       extras_require={
           'daemon':['daemons']
