@@ -3,7 +3,6 @@
 import argparse
 import logging
 import os
-import re
 import tempfile
 import time
 
@@ -130,6 +129,33 @@ def temp_path(suffix="", prefix="tmp", dir="/tmp"):
     "like mktemp, but returns a Path"
     return Path(tempfile.mktemp(suffix, prefix, str(dir)))
 
+# is there a regex for this? extract the first letters not enclosed in brackets
+def temp_prefix(s, minpre=4):
+    """
+        Return the first (mostly contiguous) letters of the string not enclosed
+        in brackets
+
+        minpre determines the minimum length before breaking on non-alpha
+        character.
+    """
+    open_bracks, close_bracks = '[({<', '])>>'
+    l, bracks = [], []
+    for i in s:
+        if i in open_bracks:
+            bracks.append(i)
+        elif i in close_bracks:
+            if bracks and bracks[-1] == open_bracks[close_bracks.index(i)]:
+                bracks.pop()
+            else:
+                logging.warn("Detected close bracket with no/unbalanced open bracket.")
+                break
+        elif not bracks:
+            if i.isalpha():
+                l.append(i)
+            elif len(l) >= minpre:
+                break
+    return ''.join(l) if l else 'tmp'
+
 def move_to_tmp(src, suffix="", prefix="tmp", dir="/tmp"):
     """
         move src to a temporary directory dir, returns Path of destination.
@@ -174,8 +200,7 @@ def main(args):
                 move_pair[watchf] = tmp
         time.sleep(30)
         for watchf, tmpf in list(move_pair.items()): # allows del during iter
-            prefix = re.match('[a-zA-Z]+', watchf.name)
-            prefix = prefix.group() + '_tmp' if prefix else 'tmp'
+            prefix = temp_prefix(watchf.name)
             dest = (temp_path(suffix=".torrent", prefix=prefix, dir=watchf.parent)
                     if args.new_name else watchf)
             if dest == watchf:
