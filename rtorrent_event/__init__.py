@@ -289,12 +289,12 @@ def get_tor_meta(base_torrent_file, args):
                                     base_torrent_file.stem)
     single_file_torrent = b'files' not in tord[b'info']
     name = tord[b'info'][b'name'].decode('utf-8')
-    if "announce" in tord:
+    if b"announce" in tord:
         trackerp = urlparse(tord[b'announce'])
         tracker = (trackerp.hostname if trackerp.hostname
                    else trackerp.netloc).decode('utf-8')
-    elif "announce-list" in tord:
-        trackerp = urlparse(tord[b'announce'][0][0])
+    elif b"announce-list" in tord:
+        trackerp = urlparse(tord[b'announce-list'][0][0])
         tracker = (trackerp.hostname if trackerp.hostname
                    else trackerp.netloc).decode('utf-8')
     else:
