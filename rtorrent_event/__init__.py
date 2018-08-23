@@ -289,9 +289,16 @@ def get_tor_meta(base_torrent_file, args):
                                     base_torrent_file.stem)
     single_file_torrent = b'files' not in tord[b'info']
     name = tord[b'info'][b'name'].decode('utf-8')
-    trackerp = urlparse(tord[b'announce'])
-    tracker = (trackerp.hostname if trackerp.hostname
-               else trackerp.netloc).decode('utf-8')
+    if "announce" in tord:
+        trackerp = urlparse(tord[b'announce'])
+        tracker = (trackerp.hostname if trackerp.hostname
+                   else trackerp.netloc).decode('utf-8')
+    elif "announce-list" in tord:
+        trackerp = urlparse(tord[b'announce'][0][0])
+        tracker = (trackerp.hostname if trackerp.hostname
+                   else trackerp.netloc).decode('utf-8')
+    else:
+        tracker = "No Tracker"
     # in multi file torrents, rtorrent adds the name to the base_dir already
     if single_file_torrent:
         return name, tracker, [base_dir / name]
