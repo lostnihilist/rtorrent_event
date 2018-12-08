@@ -24,6 +24,7 @@
 # * better logging, especially with --clean
 # * better torrent bdecoding (i.e. keys etc to strings)
 #   https://github.com/lostnihilist/bencode.py
+#   https://github.com/fuzeman/bencode.py
 # * use better transaction handling to speed up insertions?
 
 
@@ -42,6 +43,8 @@ from collections import deque, namedtuple, OrderedDict
 from math import ceil
 from pathlib import Path, PosixPath
 from urllib.parse import urlparse
+
+import bencode
 
 from inotify.adapters import Inotify
 from inotify.constants import IN_CREATE, IN_DELETE
@@ -161,11 +164,6 @@ def parse_args():
         p.error("Paths must be specified with --clean.")
     return args
 
-def decode_to_path(*pathparts, enc=None):
-    "sequence of bytes objects to Path object, decoding using enc/utf-8"
-    enc = enc if enc is not None else 'utf-8'
-    return Path(*[part.decode(enc) for part in pathparts])
-
 def is_parent(parent, child):
     "is candidate parent an actual parent of child (Paths or strings"
     return os.path.commonpath((str(parent), str(child))) == str(parent)
@@ -190,50 +188,6 @@ def common_parent(*files, are_absolute=False):
                 parent_idx = len(base_dir.parts) - 1 - i
                 base_dir = base_dir.parents[parent_idx]
     return base_dir
-
-def bdecode(s):
-    """
-    Decodes given bencoded bytes object. yanked from github
-
-    >>> decode(b'i-42e')
-    -42
-    >>> decode(b'4:utku') == b'utku'
-    True
-    >>> decode(b'li1eli2eli3eeee')
-    [1, [2, [3]]]
-    >>> decode(b'd3:bar4:spam3:fooi42ee') == {b'bar': b'spam', b'foo': 42}
-    True
-    """
-    def decode_first(s):
-        if s.startswith(b"i"):
-            match = re.match(b"i(-?\\d+)e", s)
-            return int(match.group(1)), s[match.span()[1]:]
-        elif s.startswith(b"l") or s.startswith(b"d"):
-            l = []
-            rest = s[1:]
-            while not rest.startswith(b"e"):
-                elem, rest = decode_first(rest)
-                l.append(elem)
-            rest = rest[1:]
-            if s.startswith(b"l"):
-                return l, rest
-            else:
-                return {i: j for i, j in zip(l[::2], l[1::2])}, rest
-        elif any(s.startswith(i.encode()) for i in string.digits):
-            m = re.match(b"(\\d+):", s)
-            length = int(m.group(1))
-            rest_i = m.span()[1]
-            start = rest_i
-            end = rest_i + length
-            return s[start:end], s[end:]
-        else:
-            raise ValueError("Malformed input.")
-    if isinstance(s, str):
-        raise ValueError("Must be a bytes object.")
-    ret, rest = decode_first(s)
-    if rest:
-        raise ValueError("Malformed input.")
-    return ret
 
 def tabnew_line_join(objs):
     "join objs with newline, prepending each line with tab"
@@ -278,33 +232,29 @@ def build_fs_file_set(*paths):
 
 def get_tor_meta(base_torrent_file, args):
     "return name, tracker, and list of files associated with base_torent_file"
-    with open(str(base_torrent_file), 'rb') as fd:
-        tord = bdecode(fd.read())
-    with open(str(base_torrent_file) + '.rtorrent', 'rb') as fd:
-        rtord = bdecode(fd.read())
+    tord = bencode.bread(str(base_torrent_file))
+    rtord = bencode.bread(str(base_torrent_file) + '.rtorrent')
     try:
-        base_dir = decode_to_path(rtord[b'directory']).expanduser().resolve()
+        base_dir = Path(rtord['directory']).expanduser().resolve()
     except FileNotFoundError:
         raise rTorFileNotFoundError("No data found for: %s" %
                                     base_torrent_file.stem)
-    single_file_torrent = b'files' not in tord[b'info']
-    name = tord[b'info'][b'name'].decode('utf-8')
-    if b"announce" in tord:
-        trackerp = urlparse(tord[b'announce'])
-        tracker = (trackerp.hostname if trackerp.hostname
-                   else trackerp.netloc).decode('utf-8')
-    elif b"announce-list" in tord:
-        trackerp = urlparse(tord[b'announce-list'][0][0])
-        tracker = (trackerp.hostname if trackerp.hostname
-                   else trackerp.netloc).decode('utf-8')
+    single_file_torrent = 'files' not in tord['info']
+    name = tord['info']['name']
+    if "announce" in tord:
+        trackerp = urlparse(tord['announce'])
+        tracker = trackerp.hostname if trackerp.hostname else trackerp.netloc
+    elif "announce-list" in tord:
+        trackerp = urlparse(tord['announce-list'][0][0])
+        tracker = trackerp.hostname if trackerp.hostname else trackerp.netloc
     else:
         tracker = "No Tracker"
     # in multi file torrents, rtorrent adds the name to the base_dir already
     if single_file_torrent:
         return name, tracker, [base_dir / name]
     else:
-        return name, tracker, [base_dir / decode_to_path(*file[b'path'])
-                               for file in tord[b'info'][b'files']]
+        return name, tracker, [base_dir / Path(*file['path'])
+                               for file in tord['info']['files']]
 
 def create_tables(file):
     "create sqlite db at file, creating subdirectories if necessary"
@@ -668,9 +618,9 @@ def inotify_loop(con, inot, args, queues, qfuncs, inot_funcs):
             continue
         header, type_names, watch_path, filename = event
         logging.debug("EVENT: %s" % (event,))
-        if filename.lower().endswith(b'.new'):
+        if filename.lower().endswith('.new'):
             filename = filename[:-4]
-        path = decode_to_path(watch_path, filename)
+        path = Path(watch_path, filename)
         inot_key = (path.suffix[1:], tuple(type_names))
         if inot_key in inot_funcs:
             inot_funcs[inot_key](path)
