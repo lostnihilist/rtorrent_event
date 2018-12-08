@@ -679,7 +679,7 @@ def inotify(args):
     "Setup to run inotify loop"
     setup_logging(args)
     inot = Inotify()
-    inot.add_watch(bytes(args.session), mask=IN_CREATE ^ IN_DELETE)
+    inot.add_watch(str(args.session), mask=IN_CREATE ^ IN_DELETE)
     global hooks
     if args.hooks:
         hooks = import_user(args.hooks)
