@@ -75,11 +75,11 @@ def walk_torrents(*watches, recursive=False, ext=".torrent"):
             for pd, cds, fs, in os.walk(str(watch)):
                 for file in (Path(pd, f) for f in fs):
                     if file.suffix.lower() == ext:
-                        yield file
+                        yield file.expanduser().resolve()
     else:
         for watch in watches:
-            yield from (f for f in watch.iterdir() if f.is_file() and
-                        f.suffix.lower() == ext)
+            yield from (f.expanduser().resolve() for f in watch.iterdir()
+                        if f.is_file() and f.suffix.lower() == ext)
 
 def scan_torrent(*dirs, recursive=False, known_loaded=(), ext=".torrent"):
     known_loaded = set(known_loaded)
@@ -111,7 +111,7 @@ def scan_session(session, known_loaded=()):
         else:
             tor = bencode.bread(rtor)
             watch = tor.get('tied_to_file')
-            new_loaded[rtor] = Path(watch).expanduser() if watch else None
+            new_loaded[rtor] = Path(watch).expanduser().resolve() if watch else None
     return new_loaded
 
 def try_bread(file):
