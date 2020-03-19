@@ -84,7 +84,7 @@ def walk_torrents(*watches, recursive=False, ext=".torrent"):
 def scan_torrent(*dirs, recursive=False, known_loaded=(), ext=".torrent"):
     known_loaded = set(known_loaded)
     yield from (f for f in walk_torrents(*dirs, recursive=recursive, ext=ext)
-                if f in known_loaded or try_bread(f))
+                if f in known_loaded or is_torfile(f))
 
 def scan_watch(*watches, recursive=False, known_loaded=()):
     """
@@ -114,7 +114,7 @@ def scan_session(session, known_loaded=()):
             new_loaded[rtor] = Path(watch).expanduser().resolve() if watch else None
     return new_loaded
 
-def try_bread(file):
+def is_torfile(file):
     try:
         bencode.bread(file)
     except bencode.BencodeDecodeError:
