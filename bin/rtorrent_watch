@@ -41,6 +41,8 @@ def parse_args_watch():
     p.add_argument("--new-name", action='store_true', default=False,
         help="When moving .torrent from /tmp to watch location, use new name. "
              "Helps in case a bad name is stopping rtorrent from reading, possibly.")
+    p.add_argument("-p", "--print", action="store_true", default=False,
+            help="Just print untied files in watch directory and exit.")
     p.add_argument("--tmp", action='store', type=str, default='/tmp',
         help="directory to use for tempfiles when swapping, defaults to /tmp")
     p.add_argument('-v', '--verbose', action='count', default=0,
@@ -194,6 +196,11 @@ def main(args):
         torrents_in_watch = set(scan_watch(*args.watch, recursive=args.recursive,
                                            known_loaded=torrents_in_session))
         torrents_in_session = scan_session(args.session, torrents_in_session)
+        if args.print:
+            for watchf in torrents_in_watch - set(torrents_in_session.values()):
+                print(watchf)
+            raise SystemExit()
+
         for watchf in torrents_in_watch - set(torrents_in_session.values()):
             if (now() - file_age(watchf)).total_seconds() > args.min_age:
                 tmp = move_to_tmp(watchf, dir=args.tmp)
