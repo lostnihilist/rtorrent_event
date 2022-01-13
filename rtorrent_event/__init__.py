@@ -1,5 +1,8 @@
 #!/usr/bin/python3.5
 
+# INSTALL:
+# pip3 install git+https://github.com/lostnihilist/rtorrent_event --user
+
 # NOTES:
 # * Various features require 3.5+
 # * to install inotify library https://github.com/dsoprea/PyInotify
@@ -291,6 +294,9 @@ def populate_session_tbl(con, sessfldr, no_action, args=None):
         except rTorFileNotFoundError:
             logging.warning("No data found for hash: %s" % file.stem)
             continue
+        except bencode.BencodeDecodeError:
+            logging.error("Invalid torrent data for hasth: %s" % file.stem)
+            continue
         add_new_session_file(con, file, name, tracker, torfiles, no_action,
                              args=args, commit=False)
     if not no_action:
@@ -371,9 +377,8 @@ def handle_remove_torrent(con, file, no_action, args=None):
         # all files associated with torrent
         c.execute('SELECT file FROM session_files WHERE hash = ?', (hash,))
         torfiles = [x for (x,) in c.fetchall()]
-    except IndexError:
-        logging.error("Hash to remove not in db: %s" % hash)
-        raise rTorEventException("Hash to remove not in db: %s" % hash)
+    except IndexError as e:
+        raise e
     else:
         logging.info("Remove hash, name, tracker from db: %s, '%s', %s" %
                      (hash, name, tracker))
@@ -579,11 +584,15 @@ def hooks_and_remove_torrent(con, path, args, queues):
     if hook:
         logging.debug("Running pre_remove.")
         hook(con, path, args)
-    rmtup = handle_remove_torrent(con, path, args.no_action, args=args)
-    hook = getattr(hooks, 'pre_remove', None)
-    if hook:
-        logging.debug("Running post_remove.")
-        hook(con, path, args, rmtup)
+    try:
+        rmtup = handle_remove_torrent(con, path, args.no_action, args=args)
+    except IndexError:
+        logging.error("Hash to remove not in db: %s" % path.stem)
+    else:
+        hook = getattr(hooks, 'pre_remove', None)
+        if hook:
+            logging.debug("Running post_remove.")
+            hook(con, path, args, rmtup)
 
 def setup_logging(args):
     formatter = logging.Formatter('%(asctime)s - %(levelname)s: %(message)s')
