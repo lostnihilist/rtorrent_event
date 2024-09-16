@@ -15,6 +15,8 @@ import bencode
 # TODO:
 # * don't run if rtorrent isn't running?
 # * option to touch instead of move
+# * more correctly, instead of diff using set, diff on Path.samefile(), but
+#   lots of comparisons! (N * M?)
 
 LOGFILE = Path('~/.config/rtorrent_event/watch.log')
 PIDFILE = Path("~/.local/var/run/rtorrent_watch.pid")
@@ -197,7 +199,7 @@ def main(args):
                                            known_loaded=torrents_in_session))
         torrents_in_session = scan_session(args.session, torrents_in_session)
         if args.print:
-            for watchf in torrents_in_watch - set(torrents_in_session.values()):
+            for watchf in sorted(torrents_in_watch - set(torrents_in_session.values())):
                 print(watchf)
             raise SystemExit()
 
